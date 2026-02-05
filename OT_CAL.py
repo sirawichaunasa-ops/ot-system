@@ -174,10 +174,25 @@ def summary(username: str, month: str):
     rows = []
     total = {"ot1": 0, "ot15": 0, "ot3": 0}
 
+    # month = YYYY-MM เช่น 2026-02
+    end_month = datetime.strptime(month, "%Y-%m")
+    end_date = end_month.replace(day=15)
+
+    # หาเดือนก่อนหน้า
+    if end_month.month == 1:
+        prev_month = end_month.replace(year=end_month.year - 1, month=12)
+    else:
+        prev_month = end_month.replace(month=end_month.month - 1)
+
+    start_date = prev_month.replace(day=16)
+
     for r in ot:
         if r["username"] != username:
             continue
-        if not r["date"].startswith(month):
+
+        d = datetime.strptime(r["date"], "%Y-%m-%d")
+
+        if not (start_date <= d <= end_date):
             continue
 
         rows.append({
@@ -193,7 +208,15 @@ def summary(username: str, month: str):
         total["ot15"] += r["ot15"]
         total["ot3"] += r["ot3"]
 
-    return {"rows": rows, "total": total}
+    return {
+        "period": {
+            "from": start_date.strftime("%Y-%m-%d"),
+            "to": end_date.strftime("%Y-%m-%d")
+        },
+        "rows": rows,
+        "total": total
+    }
+
 
 # =====================
 # Delete all OT
