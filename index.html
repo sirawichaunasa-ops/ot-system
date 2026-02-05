@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>OT Checker</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-100 min-h-screen p-6">
+<div class="max-w-4xl mx-auto bg-white p-6 rounded-xl shadow">
+
+<h1 class="text-2xl font-bold text-center mb-6">📊 ระบบบันทึก OT</h1>
+
+<!-- ===================== -->
+<!-- ฟอร์มบันทึก OT -->
+<!-- ===================== -->
+<div class="grid md:grid-cols-2 gap-4 mb-6">
+
+<div>
+<label class="font-medium">วันที่</label>
+<input id="date" type="date" class="w-full border p-2 rounded">
+</div>
+
+<div>
+<label class="font-medium">ประเภทวัน</label>
+<select id="type" class="w-full border p-2 rounded">
+<option value="weekday">จ - ศ</option>
+<option value="weekend">เสาร์ / อาทิตย์ / นักขัตฤกษ์</option>
+</select>
+</div>
+
+<div id="inBox" class="hidden">
+<label class="font-medium">เวลาเข้า (เสาร์-อาทิตย์)</label>
+<div class="flex gap-2">
+<select id="in_h" class="border p-2 rounded"></select>
+<select id="in_m1" class="border p-2 rounded"></select>
+<select id="in_m2" class="border p-2 rounded"></select>
+</div>
+</div>
+
+<div>
+<label class="font-medium">เวลาเลิกงาน</label>
+<div class="flex gap-2">
+<select id="out_h" class="border p-2 rounded"></select>
+<select id="out_m1" class="border p-2 rounded"></select>
+<select id="out_m2" class="border p-2 rounded"></select>
+</div>
+</div>
+
+</div>
+
+<div class="flex gap-3">
+<button onclick="saveOT()" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+💾 บันทึก OT
+</button>
+
+<button onclick="clearDay()" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">
+🗑️ ล้าง OT วันนี้
+</button>
+</div>
+
+<hr class="my-6">
+
+<!-- ===================== -->
+<!-- สรุปรายเดือน -->
+<!-- ===================== -->
+<h2 class="text-xl font-bold mb-3">📅 สรุป OT รายเดือน</h2>
+
+<div class="flex gap-3 mb-4">
+<input id="month" type="month" class="border p-2 rounded">
+<button onclick="loadSummary()" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+ดูสรุป
+</button>
+</div>
+
+<div id="summary"></div>
+
+</div>
+
+<script>
+const hours = [...Array(24).keys()]
+const mins = [...Array(10).keys()]
+
+function fill(id, arr){
+  const el = document.getElementById(id)
+  el.innerHTML = '<option value="">--</option>'
+  arr.forEach(v=>{
+    el.innerHTML += `<option value="${v}">${v}</option>`
+  })
+}
+
+['out_h','in_h'].forEach(i=>fill(i,hours))
+;['out_m1','out_m2','in_m1','in_m2'].forEach(i=>fill(i,mins))
+
+type.onchange = ()=> {
+  inBox.classList.toggle('hidden', type.value === 'weekday')
+}
+
+function getTime(h,m1,m2){
+  if(h===''||m1===''||m2==='') return null
+  return `${String(h).padStart(2,'0')}:${m1}${m2}`
+}
+
+function saveOT(){
+  if(!date.value){
+    alert("❗ กรุณาเลือกวันที่")
+    return
+  }
+
+  const out = getTime(out_h.value,out_m1.value,out_m2.value)
+  if(!out){
+    alert("❗ กรุณาเลือกเวลาเลิกงาน")
+    return
+  }
+
+  const input = {
+    work_date: date.value,
+    day_type: type.value,
+    out_time: out
+  }
+
+  if(type.value === 'weekend'){
+    const inn = getTime(in_h.value,in_m1.value,in_m2.value)
+    if(!inn){
+      alert("❗ กรุณาเลือกเวลาเข้า")
+      return
+    }
+    input.in_time = inn
+  }
+
+  fetch('/save_ot',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(input)
+  })
+  .then(r=>{
+    if(!r.ok) return r.json().then(e=>{throw e})
+    return r.json()
+  })
+  .then(()=>alert("✅ บันทึก OT เรียบร้อย"))
+  .catch(e=>alert("❌ "+e.detail))
+}
+
+function clearDay(){
+  if(!date.value){
+    alert("❗ กรุณาเลือกวันที่ก่อน")
+    return
+  }
+  if(!confirm("ลบ OT วันที่ "+date.value+" ?")) return
+
+  fetch(`/delete_ot/${date.value}`,{method:'DELETE'})
+  .then(()=>alert("🗑️ ลบข้อมูลแล้ว"))
+}
+
+function loadSummary(){
+  if(!month.value){
+    alert("❗ กรุณาเลือกเดือน")
+    return
+  }
+
+  fetch(`/summary/${month.value}`)
+  .then(r=>r.json())
+  .then(d=>{
+    let html = `
+<table class="w-full border text-center">
+<tr class="bg-gray-200">
+<th>วันที่</th><th>เลิกงาน</th><th>OT1</th><th>OT1.5</th><th>OT3</th>
+</tr>`
+
+    d.rows.forEach(r=>{
+      html+=`
+<tr class="border-b">
+<td>${r.date}</td>
+<td>${r.out}</td>
+<td>${r.ot1}</td>
+<td>${r.ot15}</td>
+<td>${r.ot3}</td>
+</tr>`
+    })
+
+    html+=`
+<tr class="font-bold bg-yellow-100">
+<td colspan="2">รวม</td>
+<td>${d.total.ot1}</td>
+<td>${d.total.ot15}</td>
+<td>${d.total.ot3}</td>
+</tr></table>`
+
+    summary.innerHTML = html
+  })
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>ระบบบันทึก OT</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-100 min-h-screen p-6">
+
+<button onclick="logout()"
+ class="fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded">
+Logout
+</button>
+
+<div class="max-w-4xl mx-auto bg-white p-6 rounded-xl shadow">
+
+<h1 class="text-2xl font-bold text-center mb-4">📊 ระบบบันทึก OT</h1>
+<p class="text-center mb-4">ผู้ใช้: <b id="user"></b></p>
+
+<!-- ===== Form ===== -->
+<div class="grid md:grid-cols-2 gap-4">
+
+<div>
+<label>วันที่</label>
+<input id="date" type="date" class="w-full border p-2 rounded">
+</div>
+
+<div>
+<label>ประเภทวัน</label>
+<select id="type" class="w-full border p-2 rounded">
+<option value="weekday">จันทร์ - ศุกร์</option>
+<option value="weekend">เสาร์ / อาทิตย์ / นักขัตฤกษ์</option>
+</select>
+</div>
+
+<div id="startBox" class="hidden">
+<label>เวลาเข้า</label>
+<div class="flex gap-2">
+<select id="in_h"></select>
+<select id="in_m1"></select>
+<select id="in_m2"></select>
+</div>
+</div>
+
+<div>
+<label>เวลาเลิกงาน</label>
+<div class="flex gap-2">
+<select id="out_h"></select>
+<select id="out_m1"></select>
+<select id="out_m2"></select>
+</div>
+</div>
+
+</div>
+
+<div class="flex gap-3 mt-4">
+<button onclick="saveOT()" class="bg-blue-600 text-white px-4 py-2 rounded">
+บันทึก OT
+</button>
+
+<button onclick="clearAll()" class="bg-red-500 text-white px-4 py-2 rounded">
+ล้าง OT ทั้งหมด
+</button>
+</div>
+
+<hr class="my-6">
+
+<!-- ===== Summary ===== -->
+<h2 class="text-xl font-bold mb-2">📅 สรุป OT รายเดือน</h2>
+
+<div class="flex gap-3 mb-4">
+<input id="month" type="month" class="border p-2 rounded">
+<button onclick="loadSummary()" class="bg-green-600 text-white px-4 py-2 rounded">
+ดูสรุป
+</button>
+</div>
+
+<div id="summary"></div>
+</div>
+
+<script>
+/* ===== Guard ===== */
+const username = localStorage.getItem("username")
+if(!username) location.replace("/")
+user.innerText = username
+
+/* ===== Time Select ===== */
+const hours = [...Array(24).keys()]
+const mins  = [...Array(10).keys()]
+
+function fill(id, arr){
+  const el = document.getElementById(id)
+  el.innerHTML = `<option value="">--</option>`
+  arr.forEach(v=>{
+    el.innerHTML += `<option value="${v}">${v}</option>`
+  })
+}
+
+["out_h","in_h"].forEach(i=>fill(i,hours))
+;["out_m1","out_m2","in_m1","in_m2"].forEach(i=>fill(i,mins))
+
+type.onchange = ()=>{
+  startBox.classList.toggle("hidden", type.value==="weekday")
+}
+
+function getTime(h,m1,m2){
+  if(h===""||m1===""||m2==="") return null
+  return `${String(h).padStart(2,"0")}:${m1}${m2}`
+}
+
+/* ===== Save OT ===== */
+function saveOT(){
+  if(!date.value) return alert("เลือกวันที่")
+
+  const out = getTime(out_h.value,out_m1.value,out_m2.value)
+  if(!out) return alert("เลือกเวลาเลิกงาน")
+
+  const payload = {
+    username: username,
+    date: date.value,
+    day: type.value,     // ✅ backend ต้องการ
+    out: out
+  }
+
+  if(type.value==="weekend"){
+    const inn = getTime(in_h.value,in_m1.value,in_m2.value)
+    if(!inn) return alert("เลือกเวลาเข้า")
+    payload.in = inn     // ✅ backend ต้องการ
+  }
+
+  fetch("/save_ot",{
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify(payload)
+  })
+  .then(r=>r.ok ? r.json() : r.text().then(t=>{throw t}))
+  .then(()=>alert("✅ บันทึกเรียบร้อย"))
+  .catch(e=>alert("❌ "+e))
+}
+
+/* ===== Summary ===== */
+function loadSummary(){
+  if(!month.value) return alert("เลือกเดือน")
+
+  fetch(`/summary/${username}/${month.value}`)
+  .then(r=>r.json())
+  .then(d=>{
+    let html = `
+<table class="w-full border text-center">
+<tr class="bg-gray-200">
+<th>วันที่</th><th>เข้า</th><th>ออก</th>
+<th>OT1</th><th>OT1.5</th><th>OT3</th>
+</tr>`
+
+    d.rows.forEach(r=>{
+      html+=`
+<tr>
+<td>${r.date}</td>
+<td>${r.in||"-"}</td>
+<td>${r.out}</td>
+<td>${r.ot1}</td>
+<td>${r.ot15}</td>
+<td>${r.ot3}</td>
+</tr>`
+    })
+
+    html+=`
+<tr class="font-bold bg-yellow-100">
+<td colspan="3">รวม</td>
+<td>${d.total.ot1}</td>
+<td>${d.total.ot15}</td>
+<td>${d.total.ot3}</td>
+</tr></table>`
+
+    summary.innerHTML = html
+  })
+}
+
+/* ===== Delete / Logout ===== */
+function clearAll(){
+  if(!confirm("ล้าง OT ทั้งหมด ?")) return
+  fetch(`/delete_all/${username}`,{method:"DELETE"})
+  .then(()=>alert("ล้างแล้ว"))
+}
+
+function logout(){
+  localStorage.clear()
+  location.replace("/")
+}
+</script>
+</body>
+</html>
