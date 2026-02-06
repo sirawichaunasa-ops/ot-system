@@ -1,3 +1,4 @@
 fastapi
 uvicorn
-bcrypt
+sqlalchemy
+psycopg2-binary
