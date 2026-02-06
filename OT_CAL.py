@@ -257,6 +257,31 @@ def summary(username: str, month: str):
         "total": total
     }
 
+@app.post("/calculate_ot_money")
+async def calculate_ot_money(req: Request):
+    data = await req.json()
+
+    salary = float(data["salary"])
+    ot1 = float(data["ot1"])
+    ot15 = float(data["ot15"])
+    ot3 = float(data["ot3"])
+
+    daily = salary / 26
+    hourly = daily / 8
+
+    money_ot1 = hourly * ot1 * 1
+    money_ot15 = hourly * ot15 * 1.5
+    money_ot3 = hourly * ot3 * 3
+
+    total = round(money_ot1 + money_ot15 + money_ot3, 2)
+
+    return {
+        "hourly_rate": round(hourly, 2),
+        "ot1_money": round(money_ot1, 2),
+        "ot15_money": round(money_ot15, 2),
+        "ot3_money": round(money_ot3, 2),
+        "total": total
+    }
 
 # =====================
 # Delete all

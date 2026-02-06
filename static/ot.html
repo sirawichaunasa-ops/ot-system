@@ -74,9 +74,40 @@ Logout
 <button onclick="loadSummary()" class="bg-green-600 text-white px-4 py-2 rounded">
 ดูสรุป
 </button>
+
+<button onclick="openCalc()" class="bg-purple-600 text-white px-4 py-2 rounded">
+คำนวณเงิน OT
+</button>
 </div>
 
 <div id="summary"></div>
+</div>
+
+<!-- ===== Modal ===== -->
+<div id="calcModal" class="hidden fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center">
+  <div class="bg-white p-6 rounded-xl w-80">
+    <h3 class="text-lg font-bold mb-3">💰 คำนวณเงิน OT</h3>
+
+    <label>ฐานเงินเดือน</label>
+    <input id="salary" type="number" class="w-full border p-2 mb-2">
+
+    <p>OT 1 แรง: <b id="m_ot1">0</b> ชม.</p>
+    <p>OT 1.5 แรง: <b id="m_ot15">0</b> ชม.</p>
+    <p>OT 3 แรง: <b id="m_ot3">0</b> ชม.</p>
+
+    <hr class="my-2">
+
+    <p class="font-bold">รวมเงิน OT: <span id="total_ot">0</span> บาท</p>
+
+    <div class="flex gap-2 mt-4">
+      <button onclick="calculateMoney()" class="bg-green-600 text-white px-4 py-2 rounded">
+        คำนวณ
+      </button>
+      <button onclick="closeCalc()" class="bg-gray-400 text-white px-4 py-2 rounded">
+        ปิด
+      </button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -92,17 +123,13 @@ const mins  = [...Array(10).keys()]
 function fill(id, arr){
   const el = document.getElementById(id)
   el.innerHTML = `<option value="">--</option>`
-  arr.forEach(v=>{
-    el.innerHTML += `<option value="${v}">${v}</option>`
-  })
+  arr.forEach(v=> el.innerHTML += `<option>${v}</option>`)
 }
 
 ["out_h","in_h"].forEach(i=>fill(i,hours))
 ;["out_m1","out_m2","in_m1","in_m2"].forEach(i=>fill(i,mins))
 
-type.onchange = ()=>{
-  startBox.classList.toggle("hidden", type.value==="weekday")
-}
+type.onchange = ()=> startBox.classList.toggle("hidden", type.value==="weekday")
 
 function getTime(h,m1,m2){
   if(h===""||m1===""||m2==="") return null
@@ -112,76 +139,76 @@ function getTime(h,m1,m2){
 /* ===== Save OT ===== */
 function saveOT(){
   if(!date.value) return alert("เลือกวันที่")
-
   const out = getTime(out_h.value,out_m1.value,out_m2.value)
   if(!out) return alert("เลือกเวลาเลิกงาน")
 
-  const payload = {
-    username: username,
-    date: date.value,
-    day: type.value,     // ✅ backend ต้องการ
-    out: out
-  }
+  const payload = { username, date:date.value, day:type.value, out }
 
   if(type.value==="weekend"){
     const inn = getTime(in_h.value,in_m1.value,in_m2.value)
     if(!inn) return alert("เลือกเวลาเข้า")
-    payload.in = inn     // ✅ backend ต้องการ
+    payload.in = inn
   }
 
-  fetch("/save_ot",{
-    method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify(payload)
-  })
-  .then(r=>r.ok ? r.json() : r.text().then(t=>{throw t}))
+  fetch("/save_ot",{method:"POST",headers:{ "Content-Type":"application/json" },body:JSON.stringify(payload)})
   .then(()=>alert("✅ บันทึกเรียบร้อย"))
-  .catch(e=>alert("❌ "+e))
 }
 
 /* ===== Summary ===== */
+let sum1=0,sum15=0,sum3=0
+
 function loadSummary(){
   if(!month.value) return alert("เลือกเดือน")
-
   fetch(`/summary/${username}/${month.value}`)
   .then(r=>r.json())
   .then(d=>{
-    let html = `
+    sum1=d.total.ot1
+    sum15=d.total.ot15
+    sum3=d.total.ot3
+
+    summary.innerHTML=`
 <table class="w-full border text-center">
 <tr class="bg-gray-200">
 <th>วันที่</th><th>เข้า</th><th>ออก</th>
-<th>OT1</th><th>OT1.5</th><th>OT3</th>
-</tr>`
-
-    d.rows.forEach(r=>{
-      html+=`
-<tr>
-<td>${r.date}</td>
-<td>${r.in||"-"}</td>
-<td>${r.out}</td>
-<td>${r.ot1}</td>
-<td>${r.ot15}</td>
-<td>${r.ot3}</td>
-</tr>`
-    })
-
-    html+=`
+<th>OT1</th><th>OT1.5</th><th>OT3</th></tr>
+${d.rows.map(r=>`
+<tr><td>${r.date}</td><td>${r.in||"-"}</td><td>${r.out}</td>
+<td>${r.ot1}</td><td>${r.ot15}</td><td>${r.ot3}</td></tr>`).join("")}
 <tr class="font-bold bg-yellow-100">
-<td colspan="3">รวม</td>
-<td>${d.total.ot1}</td>
-<td>${d.total.ot15}</td>
-<td>${d.total.ot3}</td>
+<td colspan="3">รวม</td><td>${sum1}</td><td>${sum15}</td><td>${sum3}</td>
 </tr></table>`
-
-    summary.innerHTML = html
   })
+}
+
+/* ===== OT Money ===== */
+function openCalc(){
+  m_ot1.innerText=sum1
+  m_ot15.innerText=sum15
+  m_ot3.innerText=sum3
+  calcModal.classList.remove("hidden")
+}
+
+function closeCalc(){
+  calcModal.classList.add("hidden")
+}
+
+function calculateMoney(){
+  const s=Number(salary.value)
+  if(!s) return alert("กรอกเงินเดือน")
+
+  const perHour=(s/26)/8
+  const total =
+    (perHour*sum1*1)+
+    (perHour*sum15*1.5)+
+    (perHour*sum3*3)
+
+  total_ot.innerText = total.toFixed(2)
 }
 
 /* ===== Delete / Logout ===== */
 function clearAll(){
-  if(!confirm("ล้าง OT ทั้งหมด ?")) return
-  fetch(`/delete_all/${username}`,{method:"DELETE"})
-  .then(()=>alert("ล้างแล้ว"))
+  if(confirm("ล้าง OT ทั้งหมด ?"))
+    fetch(`/delete_all/${username}`,{method:"DELETE"}).then(()=>alert("ล้างแล้ว"))
 }
 
 function logout(){
