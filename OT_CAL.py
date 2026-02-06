@@ -8,6 +8,12 @@ import bcrypt
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
+def add_months(dt, months):
+    year = dt.year + (dt.month + months - 1) // 12
+    month = (dt.month + months - 1) % 12 + 1
+    day = min(dt.day, 28)  # กันเดือนสั้น
+    return dt.replace(year=year, month=month, day=day)
+
 # =====================
 # Basic setup
 # =====================
@@ -212,9 +218,14 @@ async def save_ot(req: Request):
 @app.get("/summary/{username}/{month}")
 def summary(username: str, month: str):
     end_month = datetime.strptime(month, "%Y-%m")
+
+    # วันสิ้นงวด = วันที่ 15 ของเดือนที่เลือก
     end_date = end_month.replace(day=15)
 
-    prev_month = end_month - timedelta(days=31)
+    # เดือนก่อนหน้า "จริง"
+    prev_month = add_months(end_month, -1)
+
+    # วันเริ่มงวด = วันที่ 16 ของเดือนก่อนหน้า
     start_date = prev_month.replace(day=16)
 
     conn = get_db()
@@ -245,6 +256,7 @@ def summary(username: str, month: str):
         "rows": rows,
         "total": total
     }
+
 
 # =====================
 # Delete all
