@@ -2,11 +2,11 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from datetime import datetime, timedelta
-import json
 import os
 import math
 import bcrypt
-
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
 # =====================
 # Basic setup
@@ -16,22 +16,55 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
 
-USERS_FILE = os.path.join(BASE_DIR, "users.json")
-OT_FILE = os.path.join(BASE_DIR, "ot_data.json")
+DATABASE_URL = os.environ.get("DATABASE_URL")
+
+# =====================
+# Database
+# =====================
+def get_db():
+    return psycopg2.connect(
+        DATABASE_URL,
+        cursor_factory=RealDictCursor,
+        sslmode="require"
+    )
+
+def init_db():
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        username TEXT PRIMARY KEY,
+        password TEXT NOT NULL
+    );
+    """)
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS ot_records (
+        id SERIAL PRIMARY KEY,
+        username TEXT NOT NULL,
+        date DATE NOT NULL,
+        day_type TEXT,
+        start TIME,
+        out TIME,
+        ot1 REAL,
+        ot15 REAL,
+        ot3 REAL,
+        ts TIMESTAMP
+    );
+    """)
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+@app.on_event("startup")
+def startup():
+    init_db()
 
 # =====================
 # Utility
 # =====================
-def load(file, default):
-    if not os.path.exists(file):
-        return default
-    with open(file, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-def save(file, data):
-    with open(file, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
 def round_half_down(hours):
     return math.floor(hours * 2) / 2
 
@@ -39,14 +72,13 @@ def t(hm):
     return datetime.strptime(hm, "%H:%M")
 
 # =====================
-# OT CALCULATION (แก้วันหยุดให้ถูก)
+# OT CALCULATION
 # =====================
-def calculate_ot(date_str, out_str, start_str=None, day_type="weekday"):
+def calculate_ot(out_str, start_str=None, day_type="weekday"):
     out_dt = t(out_str)
-
     ot1 = ot15 = ot3 = 0.0
 
-    # ---------- จันทร์ – ศุกร์ ----------
+    # ----- จันทร์-ศุกร์ -----
     if day_type == "weekday":
         ot_start = t("17:20")
         if out_dt > ot_start:
@@ -54,35 +86,28 @@ def calculate_ot(date_str, out_str, start_str=None, day_type="weekday"):
             ot15 = round_half_down(diff)
         return ot1, ot15, ot3
 
-    # ---------- เสาร์ / อาทิตย์ / นักขัตฤกษ์ ----------
+    # ----- วันหยุด -----
     if not start_str:
         return 0, 0, 0
 
     start_dt = t(start_str)
-
-    total_work = (out_dt - start_dt).total_seconds() / 3600
-    if total_work <= 0:
+    total = (out_dt - start_dt).total_seconds() / 3600
+    if total <= 0:
         return 0, 0, 0
 
-    # พัก 1 ชั่วโมง (ถ้าทำงาน >= 6 ชม.)
-    if total_work >= 6:
-        total_work -= 1
+    # พัก 1 ชม ถ้าทำ >= 6 ชม
+    if total >= 6:
+        total -= 1
 
-    # ---- OT1 (สูงสุด 8 ชม) ----
-    ot1 = min(8, round_half_down(total_work))
+    ot1 = min(8, round_half_down(total))
 
-    # ---- OT3 (หลัง OT1 + พัก 20 นาที) ----
-    if total_work > 8:
-        after_8 = total_work - 8
-
-        # พัก 20 นาที = 0.333 ชม
-        after_8 -= (20 / 60)
-
+    if total > 8:
+        after_8 = total - 8
+        after_8 -= (20 / 60)  # พัก 20 นาที
         if after_8 > 0:
             ot3 = round_half_down(after_8)
 
     return ot1, 0, ot3
-
 
 # =====================
 # Pages
@@ -101,9 +126,19 @@ def ot_page():
 @app.post("/login")
 async def login(req: Request):
     data = await req.json()
-    users = load(USERS_FILE, {})
+    conn = get_db()
+    cur = conn.cursor()
 
-    if data.get("username") not in users or users[data["username"]]["password"] != data.get("password"):
+    cur.execute("SELECT password FROM users WHERE username=%s", (data["username"],))
+    user = cur.fetchone()
+
+    cur.close()
+    conn.close()
+
+    if not user or not bcrypt.checkpw(
+        data["password"].encode(),
+        user["password"].encode()
+    ):
         raise HTTPException(status_code=401, detail="ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง")
 
     return {"success": True}
@@ -111,99 +146,93 @@ async def login(req: Request):
 @app.post("/register")
 async def register(req: Request):
     data = await req.json()
-    users = load(USERS_FILE, {})
+    hashed = bcrypt.hashpw(data["password"].encode(), bcrypt.gensalt()).decode()
 
-    if data["username"] in users:
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute("SELECT 1 FROM users WHERE username=%s", (data["username"],))
+    if cur.fetchone():
         raise HTTPException(status_code=400, detail="ผู้ใช้นี้มีอยู่แล้ว")
 
-    users[data["username"]] = {"password": data["password"]}
-    save(USERS_FILE, users)
+    cur.execute(
+        "INSERT INTO users (username, password) VALUES (%s,%s)",
+        (data["username"], hashed)
+    )
+
+    conn.commit()
+    cur.close()
+    conn.close()
     return {"success": True}
 
 # =====================
-# Save OT (insert / update)
+# Save OT
 # =====================
 @app.post("/save_ot")
 async def save_ot(req: Request):
     data = await req.json()
 
-    for k in ["username", "date", "out", "day"]:
-        if k not in data:
-            raise HTTPException(status_code=400, detail="ข้อมูลไม่ครบ")
-
-    if data["day"] == "weekend" and "in" not in data:
-        raise HTTPException(status_code=400, detail="ข้อมูลไม่ครบ")
-
     ot1, ot15, ot3 = calculate_ot(
-        data["date"],
         data["out"],
         data.get("in"),
         "weekday" if data["day"] == "weekday" else "holiday"
     )
 
-    record = {
-        "username": data["username"],
-        "date": data["date"],
-        "day_type": data["day"],
-        "start": data.get("in"),
-        "out": data["out"],
-        "ot1": ot1,
-        "ot15": ot15,
-        "ot3": ot3,
-        "ts": datetime.now().isoformat()
-    }
+    conn = get_db()
+    cur = conn.cursor()
 
-    ot = load(OT_FILE, [])
+    # วันเดียวกัน = update
+    cur.execute("""
+    DELETE FROM ot_records
+    WHERE username=%s AND date=%s
+    """, (data["username"], data["date"]))
 
-    for i, r in enumerate(ot):
-        if r["username"] == record["username"] and r["date"] == record["date"]:
-            ot[i] = record
-            save(OT_FILE, ot)
-            return {"success": True, "mode": "update"}
+    cur.execute("""
+    INSERT INTO ot_records
+    (username, date, day_type, start, out, ot1, ot15, ot3, ts)
+    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+    """, (
+        data["username"],
+        data["date"],
+        data["day"],
+        data.get("in"),
+        data["out"],
+        ot1, ot15, ot3,
+        datetime.now()
+    ))
 
-    ot.append(record)
-    save(OT_FILE, ot)
-    return {"success": True, "mode": "insert"}
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"success": True}
 
 # =====================
-# Summary
+# Summary (16 → 15)
 # =====================
 @app.get("/summary/{username}/{month}")
 def summary(username: str, month: str):
-    ot = load(OT_FILE, [])
-    rows = []
-    total = {"ot1": 0, "ot15": 0, "ot3": 0}
-
-    # month = YYYY-MM เช่น 2026-02
     end_month = datetime.strptime(month, "%Y-%m")
     end_date = end_month.replace(day=15)
 
-    # หาเดือนก่อนหน้า
-    if end_month.month == 1:
-        prev_month = end_month.replace(year=end_month.year - 1, month=12)
-    else:
-        prev_month = end_month.replace(month=end_month.month - 1)
-
+    prev_month = end_month - timedelta(days=31)
     start_date = prev_month.replace(day=16)
 
-    for r in ot:
-        if r["username"] != username:
-            continue
+    conn = get_db()
+    cur = conn.cursor()
 
-        d = datetime.strptime(r["date"], "%Y-%m-%d")
+    cur.execute("""
+    SELECT * FROM ot_records
+    WHERE username=%s
+      AND date BETWEEN %s AND %s
+    ORDER BY date
+    """, (username, start_date, end_date))
 
-        if not (start_date <= d <= end_date):
-            continue
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
 
-        rows.append({
-            "date": r["date"],
-            "start": r.get("start"),
-            "out": r["out"],
-            "ot1": r["ot1"],
-            "ot15": r["ot15"],
-            "ot3": r["ot3"]
-        })
-
+    total = {"ot1": 0, "ot15": 0, "ot3": 0}
+    for r in rows:
         total["ot1"] += r["ot1"]
         total["ot15"] += r["ot15"]
         total["ot3"] += r["ot3"]
@@ -217,13 +246,15 @@ def summary(username: str, month: str):
         "total": total
     }
 
-
 # =====================
-# Delete all OT
+# Delete all
 # =====================
 @app.delete("/delete_all/{username}")
 def delete_all(username: str):
-    ot = load(OT_FILE, [])
-    ot = [r for r in ot if r["username"] != username]
-    save(OT_FILE, ot)
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM ot_records WHERE username=%s", (username,))
+    conn.commit()
+    cur.close()
+    conn.close()
     return {"success": True}
