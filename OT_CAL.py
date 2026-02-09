@@ -71,8 +71,24 @@ def startup():
 # =====================
 # Utility
 # =====================
-def round_half_down(hours):
-    return math.floor(hours * 2) / 2
+def round_time_half_hour(dt, mode="start"):
+    minutes = dt.minute
+
+    if mode == "start":  # เข้า → ปัดขึ้น
+        if minutes in (0, 30):
+            return dt.replace(second=0)
+        elif minutes < 30:
+            return dt.replace(minute=30, second=0)
+        else:
+            return (dt.replace(minute=0, second=0) + timedelta(hours=1))
+    else:  # ออก → ปัดลง
+        if minutes in (0, 30):
+            return dt.replace(second=0)
+        elif minutes < 30:
+            return dt.replace(minute=0, second=0)
+        else:
+            return dt.replace(minute=30, second=0)
+
 
 def t(hm):
     return datetime.strptime(hm, "%H:%M")
@@ -92,27 +108,23 @@ def calculate_ot(out_str, start_str=None, day_type="weekday"):
             ot15 = round_half_down(diff)
         return ot1, ot15, ot3
 
-    # ----- วันหยุด -----
+   # ----- วันหยุด -----
     if not start_str:
         return 0, 0, 0
 
-    start_dt = t(start_str)
-    out_dt = t(out_str)
+    start_dt = round_time_half_hour(t(start_str), "start")
+    out_dt   = round_time_half_hour(t(out_str), "end")
 
     total = (out_dt - start_dt).total_seconds() / 3600
     if total <= 0:
         return 0, 0, 0
 
-    # === พักเที่ยง 12:00–13:00 ===
+    # พักเที่ยง 12:00–13:00
     lunch_start = t("12:00")
     lunch_end = t("13:00")
 
-    # ถ้าทำงานทับช่วงพักเที่ยง
     if start_dt < lunch_end and out_dt > lunch_start:
         total -= 1
-
-    # ปัดครึ่งชั่วโมง
-    total = round_half_down(total)
 
     # === OT 1 แรง ===
     ot1 = min(total, 8)
@@ -121,14 +133,15 @@ def calculate_ot(out_str, start_str=None, day_type="weekday"):
     ot3 = 0
     if total > 8:
         after_8 = total - 8
-
-        # พัก 20 นาที
-        after_8 -= (20 / 60)
-
+        after_8 -= (20 / 60)  # พัก 20 นาที
         if after_8 > 0:
             ot3 = round_half_down(after_8)
 
-    return ot1, 0, ot3
+    return round_half_down(ot1), 0, ot3
+
+
+
+  
 
 
 # =====================
