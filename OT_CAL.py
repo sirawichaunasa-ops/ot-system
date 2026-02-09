@@ -97,23 +97,39 @@ def calculate_ot(out_str, start_str=None, day_type="weekday"):
         return 0, 0, 0
 
     start_dt = t(start_str)
+    out_dt = t(out_str)
+
     total = (out_dt - start_dt).total_seconds() / 3600
     if total <= 0:
         return 0, 0, 0
 
-    # พัก 1 ชม ถ้าทำ >= 6 ชม
-    if total >= 6:
+    # === พักเที่ยง 12:00–13:00 ===
+    lunch_start = t("12:00")
+    lunch_end = t("13:00")
+
+    # ถ้าช่วงทำงานทับช่วงพักเที่ยง
+    if start_dt < lunch_end and out_dt > lunch_start:
         total -= 1
 
-    ot1 = min(8, round_half_down(total))
+    # ปัดครึ่งชั่วโมงก่อน
+    total = round_half_down(total)
 
+    # === OT1 ===
+    ot1 = min(total, 8)
+
+    # === OT3 (หลังครบ 8 ชม.) ===
+    ot3 = 0
     if total > 8:
         after_8 = total - 8
-        after_8 -= (20 / 60)  # พัก 20 นาที
+
+        # พัก 20 นาที
+        after_8 -= (20 / 60)
+
         if after_8 > 0:
             ot3 = round_half_down(after_8)
 
-    return ot1, 0, ot3
+    return ot1, 0, 
+
 
 # =====================
 # Pages
