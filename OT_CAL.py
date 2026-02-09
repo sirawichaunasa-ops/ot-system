@@ -107,17 +107,17 @@ def calculate_ot(out_str, start_str=None, day_type="weekday"):
     lunch_start = t("12:00")
     lunch_end = t("13:00")
 
-    # ถ้าช่วงทำงานทับช่วงพักเที่ยง
+    # ถ้าทำงานทับช่วงพักเที่ยง
     if start_dt < lunch_end and out_dt > lunch_start:
         total -= 1
 
-    # ปัดครึ่งชั่วโมงก่อน
+    # ปัดครึ่งชั่วโมง
     total = round_half_down(total)
 
-    # === OT1 ===
+    # === OT 1 แรง ===
     ot1 = min(total, 8)
 
-    # === OT3 (หลังครบ 8 ชม.) ===
+    # === OT 3 แรง ===
     ot3 = 0
     if total > 8:
         after_8 = total - 8
@@ -128,7 +128,7 @@ def calculate_ot(out_str, start_str=None, day_type="weekday"):
         if after_8 > 0:
             ot3 = round_half_down(after_8)
 
-    return ot1, 0, 
+    return ot1, 0, ot3
 
 
 # =====================
