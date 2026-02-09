@@ -71,6 +71,8 @@ def startup():
 # =====================
 # Utility
 # =====================
+def round_half_down(hours):
+    return math.floor(hours * 2) / 2
 def round_time_half_hour(dt, mode="start"):
     minutes = dt.minute
 
