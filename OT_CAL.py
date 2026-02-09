@@ -131,13 +131,12 @@ def calculate_ot(out_str, start_str=None, day_type="weekday"):
     # === OT 1 แรง ===
     ot1 = min(total, 8)
 
-    # === OT 3 แรง ===
+    # === OT 3 แรง (หลังพัก 20 นาที) ===
     ot3 = 0
     if total > 8:
-        after_8 = total - 8
-        after_8 -= (20 / 60)  # พัก 20 นาที
-        if after_8 > 0:
-            ot3 = round_half_down(after_8)
+        after_break = total - 8 - (20 / 60)
+        if after_break > 0:
+            ot3 = round_half_down(after_break)
 
     return round_half_down(ot1), 0, ot3
 
