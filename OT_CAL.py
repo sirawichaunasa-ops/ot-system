@@ -355,3 +355,34 @@ def delete_all(username: str):
     cur.close()
     conn.close()
     return {"success": True}
+# =====================
+# Delete OT by date
+# =====================
+@app.delete("/delete_ot/{username}/{date}")
+def delete_ot_by_date(username: str, date: str):
+    conn = get_db()
+    cur = conn.cursor()
+
+    # เช็คก่อนว่ามีข้อมูลไหม
+    cur.execute("""
+        SELECT 1 FROM ot_records
+        WHERE username=%s AND date=%s
+    """, (username, date))
+
+    if not cur.fetchone():
+        cur.close()
+        conn.close()
+        return {"success": False, "msg": "ไม่พบข้อมูลวันนั้น"}
+
+    # ลบข้อมูล
+    cur.execute("""
+        DELETE FROM ot_records
+        WHERE username=%s AND date=%s
+    """, (username, date))
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    return {"success": True}
+

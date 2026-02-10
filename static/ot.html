@@ -6,28 +6,29 @@
 <script src="https://cdn.tailwindcss.com"></script>
 </head>
 
-<body class="bg-gray-100 min-h-screen p-6">
+<body class="min-h-screen bg-gradient-to-br from-blue-100 via-slate-100 to-purple-100 p-6">
 
+<!-- Logout -->
 <button onclick="logout()"
- class="fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded">
+ class="fixed top-4 right-4 bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded shadow">
 Logout
 </button>
 
-<div class="max-w-4xl mx-auto bg-white p-6 rounded-xl shadow">
+<div class="max-w-5xl mx-auto bg-white p-6 rounded-2xl shadow-xl">
 
-<h1 class="text-2xl font-bold text-center mb-4">📊 ระบบบันทึก OT</h1>
-<p class="text-center mb-4">ผู้ใช้: <b id="user"></b></p>
+<h1 class="text-2xl font-bold text-center mb-2">📊 ระบบบันทึก OT</h1>
+<p class="text-center mb-6">ผู้ใช้: <b id="user"></b></p>
 
 <!-- ===== Form ===== -->
 <div class="grid md:grid-cols-2 gap-4">
 
 <div>
-<label>วันที่</label>
+<label class="font-semibold">วันที่</label>
 <input id="date" type="date" class="w-full border p-2 rounded">
 </div>
 
 <div>
-<label>ประเภทวัน</label>
+<label class="font-semibold">ประเภทวัน</label>
 <select id="type" class="w-full border p-2 rounded">
 <option value="weekday">จันทร์ - ศุกร์</option>
 <option value="weekend">เสาร์ / อาทิตย์ / นักขัตฤกษ์</option>
@@ -35,47 +36,52 @@ Logout
 </div>
 
 <div id="startBox" class="hidden">
-<label>เวลาเข้า</label>
+<label class="font-semibold">เวลาเข้า</label>
 <div class="flex gap-2">
-<select id="in_h"></select>
-<select id="in_m1"></select>
-<select id="in_m2"></select>
+<select id="in_h" class="border p-1 rounded"></select>
+<select id="in_m1" class="border p-1 rounded"></select>
+<select id="in_m2" class="border p-1 rounded"></select>
 </div>
 </div>
 
 <div>
-<label>เวลาเลิกงาน</label>
+<label class="font-semibold">เวลาเลิกงาน</label>
 <div class="flex gap-2">
-<select id="out_h"></select>
-<select id="out_m1"></select>
-<select id="out_m2"></select>
+<select id="out_h" class="border p-1 rounded"></select>
+<select id="out_m1" class="border p-1 rounded"></select>
+<select id="out_m2" class="border p-1 rounded"></select>
 </div>
 </div>
 
 </div>
 
-<div class="flex gap-3 mt-4">
-<button onclick="saveOT()" class="bg-blue-600 text-white px-4 py-2 rounded">
-บันทึก OT
+<div class="flex flex-wrap gap-3 mt-6">
+<button onclick="saveOT()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow">
+💾 บันทึก OT
 </button>
 
-<button onclick="clearAll()" class="bg-red-500 text-white px-4 py-2 rounded">
-ล้าง OT ทั้งหมด
+<button onclick="deleteByDate()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded shadow">
+🗑️ ลบ OT วันที่เลือก
+</button>
+
+<button onclick="clearAll()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded shadow">
+ล้างทั้งหมด
 </button>
 </div>
 
-<hr class="my-6">
+<hr class="my-8">
 
 <!-- ===== Summary ===== -->
-<h2 class="text-xl font-bold mb-2">📅 สรุป OT รายเดือน</h2>
+<h2 class="text-xl font-bold mb-3">📅 สรุป OT รายเดือน</h2>
 
-<div class="flex gap-3 mb-4">
+<div class="flex flex-wrap gap-3 mb-4">
 <input id="month" type="month" class="border p-2 rounded">
-<button onclick="loadSummary()" class="bg-green-600 text-white px-4 py-2 rounded">
+
+<button onclick="loadSummary()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded shadow">
 ดูสรุป
 </button>
 
-<button onclick="openCalc()" class="bg-purple-600 text-white px-4 py-2 rounded">
+<button onclick="openCalc()" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded shadow">
 คำนวณเงิน OT
 </button>
 </div>
@@ -85,11 +91,11 @@ Logout
 
 <!-- ===== Modal ===== -->
 <div id="calcModal" class="hidden fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center">
-  <div class="bg-white p-6 rounded-xl w-80">
+  <div class="bg-white p-6 rounded-xl w-80 shadow-xl">
     <h3 class="text-lg font-bold mb-3">💰 คำนวณเงิน OT</h3>
 
     <label>ฐานเงินเดือน</label>
-    <input id="salary" type="number" class="w-full border p-2 mb-2">
+    <input id="salary" type="number" class="w-full border p-2 mb-2 rounded">
 
     <p>OT 1 แรง: <b id="m_ot1">0</b> ชม.</p>
     <p>OT 1.5 แรง: <b id="m_ot15">0</b> ชม.</p>
@@ -117,41 +123,50 @@ if(!username) location.replace("/")
 user.innerText = username
 
 /* ===== Time Select ===== */
-const hours = [...Array(24).keys()]
-const mins  = [...Array(10).keys()]
+const hours=[...Array(24).keys()]
+const mins=[...Array(10).keys()]
 
-function fill(id, arr){
-  const el = document.getElementById(id)
-  el.innerHTML = `<option value="">--</option>`
-  arr.forEach(v=> el.innerHTML += `<option>${v}</option>`)
+function fill(id,arr){
+  const el=document.getElementById(id)
+  el.innerHTML='<option value="">--</option>'
+  arr.forEach(v=>el.innerHTML+=`<option>${v}</option>`)
 }
 
 ["out_h","in_h"].forEach(i=>fill(i,hours))
 ;["out_m1","out_m2","in_m1","in_m2"].forEach(i=>fill(i,mins))
 
-type.onchange = ()=> startBox.classList.toggle("hidden", type.value==="weekday")
+type.onchange=()=>startBox.classList.toggle("hidden",type.value==="weekday")
 
 function getTime(h,m1,m2){
   if(h===""||m1===""||m2==="") return null
   return `${String(h).padStart(2,"0")}:${m1}${m2}`
 }
 
-/* ===== Save OT ===== */
+/* ===== Save ===== */
 function saveOT(){
   if(!date.value) return alert("เลือกวันที่")
-  const out = getTime(out_h.value,out_m1.value,out_m2.value)
-  if(!out) return alert("เลือกเวลาเลิกงาน")
+  const out=getTime(out_h.value,out_m1.value,out_m2.value)
+  if(!out) return alert("เลือกเวลาออก")
 
-  const payload = { username, date:date.value, day:type.value, out }
+  const payload={username,date:date.value,day:type.value,out}
 
   if(type.value==="weekend"){
-    const inn = getTime(in_h.value,in_m1.value,in_m2.value)
+    const inn=getTime(in_h.value,in_m1.value,in_m2.value)
     if(!inn) return alert("เลือกเวลาเข้า")
-    payload.in = inn
+    payload.in=inn
   }
 
-  fetch("/save_ot",{method:"POST",headers:{ "Content-Type":"application/json" },body:JSON.stringify(payload)})
+  fetch("/save_ot",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})
   .then(()=>alert("✅ บันทึกเรียบร้อย"))
+}
+
+/* ===== Delete by Date ===== */
+function deleteByDate(){
+  if(!date.value) return alert("เลือกวันที่ก่อน")
+  if(!confirm(`ยืนยันลบ OT วันที่ ${date.value} ?`)) return
+
+  fetch(`/delete_ot/${username}/${date.value}`,{method:"DELETE"})
+  .then(()=>{ alert("🗑️ ลบแล้ว"); loadSummary() })
 }
 
 /* ===== Summary ===== */
@@ -167,54 +182,49 @@ function loadSummary(){
     sum3=d.total.ot3
 
     summary.innerHTML=`
-<table class="w-full border text-center">
+<table class="w-full border text-center shadow rounded overflow-hidden">
 <tr class="bg-gray-200">
 <th>วันที่</th><th>เข้า</th><th>ออก</th>
-<th>OT1</th><th>OT1.5</th><th>OT3</th></tr>
+<th>OT1</th><th>OT1.5</th><th>OT3</th>
+</tr>
 ${d.rows.map(r=>`
-<tr><td>${r.date}</td><td>${r.in||"-"}</td><td>${r.out}</td>
-<td>${r.ot1}</td><td>${r.ot15}</td><td>${r.ot3}</td></tr>`).join("")}
+<tr class="border-t">
+<td>${r.date}</td>
+<td>${r.start||"-"}</td>
+<td>${r.out}</td>
+<td>${r.ot1}</td>
+<td>${r.ot15}</td>
+<td>${r.ot3}</td>
+</tr>`).join("")}
 <tr class="font-bold bg-yellow-100">
-<td colspan="3">รวม</td><td>${sum1}</td><td>${sum15}</td><td>${sum3}</td>
+<td colspan="3">รวม</td>
+<td>${sum1}</td><td>${sum15}</td><td>${sum3}</td>
 </tr></table>`
   })
 }
 
-/* ===== OT Money ===== */
+/* ===== Money ===== */
 function openCalc(){
   m_ot1.innerText=sum1
   m_ot15.innerText=sum15
   m_ot3.innerText=sum3
   calcModal.classList.remove("hidden")
 }
-
-function closeCalc(){
-  calcModal.classList.add("hidden")
-}
-
+function closeCalc(){calcModal.classList.add("hidden")}
 function calculateMoney(){
   const s=Number(salary.value)
   if(!s) return alert("กรอกเงินเดือน")
-
-  const perHour=(s/26)/8
-  const total =
-    (perHour*sum1*1)+
-    (perHour*sum15*1.5)+
-    (perHour*sum3*3)
-
-  total_ot.innerText = total.toFixed(2)
+  const h=(s/26)/8
+  total_ot.innerText=((h*sum1)+(h*sum15*1.5)+(h*sum3*3)).toFixed(2)
 }
 
-/* ===== Delete / Logout ===== */
+/* ===== Clear / Logout ===== */
 function clearAll(){
   if(confirm("ล้าง OT ทั้งหมด ?"))
     fetch(`/delete_all/${username}`,{method:"DELETE"}).then(()=>alert("ล้างแล้ว"))
 }
-
-function logout(){
-  localStorage.clear()
-  location.replace("/")
-}
+function logout(){localStorage.clear();location.replace("/")}
 </script>
+
 </body>
 </html>
