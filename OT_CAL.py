@@ -71,6 +71,27 @@ def startup():
 # =====================
 # Utility
 # =====================
+def round_in_time(dt):
+    # ปัดขึ้นครึ่งชั่วโมง (เวลาเข้า)
+    m = dt.minute
+    if m == 0 or m == 30:
+        return dt.replace(second=0)
+    elif m < 30:
+        return dt.replace(minute=30, second=0)
+    else:
+        return (dt.replace(minute=0, second=0) + timedelta(hours=1))
+
+
+def round_out_time_for_ot1(dt):
+    # ปัดลงครึ่งชั่วโมง (ใช้เฉพาะหา OT1)
+    m = dt.minute
+    if m == 0 or m == 30:
+        return dt.replace(second=0)
+    elif m < 30:
+        return dt.replace(minute=0, second=0)
+    else:
+        return dt.replace(minute=30, second=0)
+
 def round_half_down(hours):
     return math.floor(hours * 2) / 2
 def round_time_half_hour(dt, mode="start"):
@@ -99,6 +120,7 @@ def t(hm):
 # OT CALCULATION
 # =====================
 def calculate_ot(out_str, start_str=None, day_type="weekday"):
+
     out_dt = t(out_str)
     ot1 = ot15 = ot3 = 0.0
 
@@ -110,35 +132,43 @@ def calculate_ot(out_str, start_str=None, day_type="weekday"):
             ot15 = round_half_down(diff)
         return ot1, ot15, ot3
 
-   # ----- วันหยุด -----
+    # ----- วันหยุด -----
     if not start_str:
         return 0, 0, 0
 
     start_dt = round_time_half_hour(t(start_str), "start")
-    out_dt   = round_time_half_hour(t(out_str), "end")
+    out_dt_real = t(out_str)
 
-    total = (out_dt - start_dt).total_seconds() / 3600
+    total = (out_dt_real - start_dt).total_seconds() / 3600
     if total <= 0:
         return 0, 0, 0
 
-    # พักเที่ยง 12:00–13:00
+    # พักเที่ยง
     lunch_start = t("12:00")
     lunch_end = t("13:00")
 
-    if start_dt < lunch_end and out_dt > lunch_start:
+    lunch_deduct = False
+    if start_dt < lunch_end and out_dt_real > lunch_start:
         total -= 1
+        lunch_deduct = True
 
-    # === OT 1 แรง ===
+    # OT1
     ot1 = min(total, 8)
 
-    # === OT 3 แรง (หลังพัก 20 นาที) ===
+    # OT3
     ot3 = 0
     if total > 8:
-        after_break = total - 8 - (20 / 60)
-        if after_break > 0:
-            ot3 = round_half_down(after_break)
+        # เริ่ม OT3 = ทำงาน 8 ชม + พักเที่ยง (ถ้ามี) + พัก 20 นาที
+        ot3_start_time = start_dt + timedelta(hours=8, minutes=20)
+        if lunch_deduct:
+            ot3_start_time += timedelta(hours=1)
+
+        if out_dt_real > ot3_start_time:
+            diff_ot3 = (out_dt_real - ot3_start_time).total_seconds() / 3600
+            ot3 = round_half_down(diff_ot3)
 
     return round_half_down(ot1), 0, ot3
+
 
 
 
