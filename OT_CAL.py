@@ -301,12 +301,19 @@ def summary(username: str, month: str):
     rows = cur.fetchall()
     cur.close()
     conn.close()
-
     total = {"ot1": 0, "ot15": 0, "ot3": 0}
+
     for r in rows:
-        total["ot1"] += r["ot1"]
-        total["ot15"] += r["ot15"]
-        total["ot3"] += r["ot3"]
+        total["ot1"] += r["ot1"] or 0
+        total["ot15"] += r["ot15"] or 0
+        total["ot3"] += r["ot3"] or 0
+
+    # 🔥 รวมชั่วโมงทั้งหมด
+    total_all_hours = (
+        total["ot1"] +
+        total["ot15"] +
+        total["ot3"]
+    )
 
     return {
         "period": {
@@ -314,8 +321,12 @@ def summary(username: str, month: str):
             "to": end_date.strftime("%Y-%m-%d")
         },
         "rows": rows,
-        "total": total
+        "total": total,
+        "total_all_hours": round(total_all_hours, 2)
     }
+
+
+    
 
 @app.post("/calculate_ot_money")
 async def calculate_ot_money(req: Request):
